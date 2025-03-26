@@ -2,7 +2,7 @@
 
 > **Powerful mathematics in just a few KB: all the calculation power you need without the bloat.**
 
-**NMRI isn't just another calculator - it's your mathematical ally for the command line. Combining the elegance of simple syntax with the power of advanced mathematics, NMRI puts professional-grade computational power at your fingertips, right in your terminal.
+**NMRI isn't just another calculator** - it's your mathematical ally for the command line. Combining the elegance of simple syntax with the power of advanced mathematics, NMRI puts professional-grade computational power at your fingertips, right in your terminal.
 
 ## ✨ Features
 
