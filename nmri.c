@@ -472,62 +472,62 @@ void show_help(void)
     printf("\n%s%sNMRI Calculator Help%s\n\n", COLOR_BOLD, COLOR_YELLOW, COLOR_RESET);
 
     printf("%s%sCommands:%s\n", COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
-    printf("  %sexit%s       Exit the calculator.\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %shelp%s       Show this help message.\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %sclear%s      Clear the terminal screen.\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %shistory%s    Show the command history.\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %svars%s       List all defined variables (alias: variables).\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %smem%s        Show the current value stored in memory (alias: memory).\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %sm+%s         Add the last result ('ans') to memory.\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %sm-%s         Subtract the last result ('ans') from memory.\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %smr%s         Recall the value from memory (sets 'ans').\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %smc%s         Clear the memory (set to 0).\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %sstore <n>%s  Store the last result ('ans') in variable <n> (e.g., store my_var).\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %slog on%s     Enable logging to '%s'.\n", COLOR_GREEN, COLOR_RESET, log_path);
-    printf("  %slog off%s    Disable logging.\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %slog show%s   Show the last %d lines from the log file.\n", COLOR_GREEN, COLOR_RESET, HISTORY_SIZE);
-    printf("  %slog file%s   Show the current log file path.\n\n", COLOR_GREEN, COLOR_RESET);
+    printf("  %sexit%s      Exit the calculator.\n", COLOR_GREEN, COLOR_RESET);
+    printf("  %shelp%s      Show this help message.\n", COLOR_GREEN, COLOR_RESET);
+    printf("  %sclear%s     Clear the terminal screen.\n", COLOR_GREEN, COLOR_RESET);
+    printf("  %shistory%s   Show the command history.\n", COLOR_GREEN, COLOR_RESET);
+    printf("  %svars%s      List all defined variables (alias: variables).\n", COLOR_GREEN, COLOR_RESET);
+    printf("  %smem%s       Show the current value stored in memory (alias: memory).\n", COLOR_GREEN, COLOR_RESET);
+    printf("  %sm+%s        Add the last result ('ans') to memory.\n", COLOR_GREEN, COLOR_RESET);
+    printf("  %sm-%s        Subtract the last result ('ans') from memory.\n", COLOR_GREEN, COLOR_RESET);
+    printf("  %smr%s        Recall the value from memory (sets 'ans').\n", COLOR_GREEN, COLOR_RESET);
+    printf("  %smc%s        Clear the memory (set to 0).\n", COLOR_GREEN, COLOR_RESET);
+    printf("  %sstore <n>%s Store the last result ('ans') in variable <n> (e.g., store my_var).\n", COLOR_GREEN, COLOR_RESET);
+    printf("  %slog on%s    Enable logging to '%s'.\n", COLOR_GREEN, COLOR_RESET, log_path);
+    printf("  %slog off%s   Disable logging.\n", COLOR_GREEN, COLOR_RESET);
+    printf("  %slog show%s  Show the last %d lines from the log file.\n", COLOR_GREEN, COLOR_RESET, HISTORY_SIZE);
+    printf("  %slog file%s  Show the current log file path.\n\n", COLOR_GREEN, COLOR_RESET);
 
     printf("%s%sConstants:%s\n", COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
-    printf("  %spi%s         Pi (π ≈ 3.14159...)\n", COLOR_MAGENTA, COLOR_RESET);
-    printf("  %se%s          Euler's number (e ≈ 2.71828...)\n", COLOR_MAGENTA, COLOR_RESET);
-    printf("  %sphi%s        Golden ratio (φ ≈ 1.61803...)\n", COLOR_MAGENTA, COLOR_RESET);
-    printf("  %sgamma%s      Euler-Mascheroni constant (γ ≈ 0.57721...)\n", COLOR_MAGENTA, COLOR_RESET);
-    printf("  %sc%s          Speed of light (m/s ≈ 2.99792e8)\n", COLOR_MAGENTA, COLOR_RESET);
-    printf("  %sh%s          Planck's constant (J⋅s ≈ 6.626e-34)\n", COLOR_MAGENTA, COLOR_RESET);
-    printf("  %sG%s          Gravitational constant (m³/kg/s² ≈ 6.674e-11)\n", COLOR_MAGENTA, COLOR_RESET);
-    printf("  %sNa%s         Avogadro's number (mol⁻¹ ≈ 6.022e+23)\n", COLOR_MAGENTA, COLOR_RESET);
-    printf("  %sk%s          Boltzmann constant (J/K ≈ 1.380e-23)\n", COLOR_MAGENTA, COLOR_RESET);
-    printf("  %sinf%s        Infinity.\n", COLOR_MAGENTA, COLOR_RESET);
-    printf("  %sans%s        Result of the last successful calculation.\n\n", COLOR_MAGENTA, COLOR_RESET);
+    printf("  %spi%s        Pi (π ≈ 3.14159...)\n", COLOR_MAGENTA, COLOR_RESET);
+    printf("  %se%s         Euler's number (e ≈ 2.71828...)\n", COLOR_MAGENTA, COLOR_RESET);
+    printf("  %sphi%s       Golden ratio (φ ≈ 1.61803...)\n", COLOR_MAGENTA, COLOR_RESET);
+    printf("  %sgamma%s     Euler-Mascheroni constant (γ ≈ 0.57721...)\n", COLOR_MAGENTA, COLOR_RESET);
+    printf("  %sc%s         Speed of light (m/s ≈ 2.99792e8)\n", COLOR_MAGENTA, COLOR_RESET);
+    printf("  %sh%s         Planck's constant (J⋅s ≈ 6.626e-34)\n", COLOR_MAGENTA, COLOR_RESET);
+    printf("  %sG%s         Gravitational constant (m³/kg/s² ≈ 6.674e-11)\n", COLOR_MAGENTA, COLOR_RESET);
+    printf("  %sNa%s        Avogadro's number (mol⁻¹ ≈ 6.022e+23)\n", COLOR_MAGENTA, COLOR_RESET);
+    printf("  %sk%s         Boltzmann constant (J/K ≈ 1.380e-23)\n", COLOR_MAGENTA, COLOR_RESET);
+    printf("  %sinf%s       Infinity.\n", COLOR_MAGENTA, COLOR_RESET);
+    printf("  %sans%s       Result of the last successful calculation.\n\n", COLOR_MAGENTA, COLOR_RESET);
 
     printf("%s%sOperators:%s\n", COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
-    printf("  %s+, -%s       Addition, Subtraction.\n", COLOR_BLUE, COLOR_RESET);
-    printf("             %sSupports percentages: 'A + B%%' means A + (B/100)*A%s\n", COLOR_DIM, COLOR_RESET);
-    printf("  %s*, /%s       Multiplication, Division.\n", COLOR_BLUE, COLOR_RESET);
-    printf("             %sSupports percentages: 'A * B%%' means A * (B/100)%s\n", COLOR_DIM, COLOR_RESET);
-    printf("  %s^%s          Power (right-associative).\n", COLOR_BLUE, COLOR_RESET);
-    printf("  %s%%%s          Modulo (remainder).\n", COLOR_BLUE, COLOR_RESET);
-    printf("  %s=%s          Assignment (e.g., 'x = 5 * 2'). Must be the first operator.\n\n", COLOR_BLUE, COLOR_RESET);
+    printf("  %s+, -%s      Addition, Subtraction.\n", COLOR_BLUE, COLOR_RESET);
+    printf("            %sSupports percentages: 'A + B%%' means A + (B/100)*A%s\n", COLOR_DIM, COLOR_RESET);
+    printf("  %s*, /%s      Multiplication, Division.\n", COLOR_BLUE, COLOR_RESET);
+    printf("            %sSupports percentages: 'A * B%%' means A * (B/100)%s\n", COLOR_DIM, COLOR_RESET);
+    printf("  %s^%s         Power (right-associative).\n", COLOR_BLUE, COLOR_RESET);
+    printf("  %s%%%s         Modulo (remainder).\n", COLOR_BLUE, COLOR_RESET);
+    printf("  %s=%s         Assignment (e.g., 'x = 5 * 2'). Must be the first operator.\n\n", COLOR_BLUE, COLOR_RESET);
 
     printf("%s%sFunctions:%s (Arguments in radians unless specified)\n", COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
-    printf("  %ssin(x), cos(x), tan(x)%s    Trigonometric functions.\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %ssin(x), cos(x), tan(x)%s   Trigonometric functions.\n", COLOR_CYAN, COLOR_RESET);
     printf("  %sasin(x), acos(x), atan(x)%s Inverse trigonometric functions.\n", COLOR_CYAN, COLOR_RESET);
-    printf("  %slog(x), ln(x)%s            Natural logarithm.\n", COLOR_CYAN, COLOR_RESET);
-    printf("  %ssqrt(x)%s                   Square root.\n", COLOR_CYAN, COLOR_RESET);
-    printf("  %sexp(x)%s                    Exponential (e^x).\n", COLOR_CYAN, COLOR_RESET);
-    printf("  %sabs(x)%s                    Absolute value.\n", COLOR_CYAN, COLOR_RESET);
-    printf("  %sfloor(x)%s                  Floor (round down).\n", COLOR_CYAN, COLOR_RESET);
-    printf("  %sceil(x)%s                   Ceiling (round up).\n", COLOR_CYAN, COLOR_RESET);
-    printf("  %sround(x)%s                  Round to nearest integer.\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %slog(x), ln(x)%s           Natural logarithm.\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %ssqrt(x)%s                 Square root.\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %sexp(x)%s                  Exponential (e^x).\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %sabs(x)%s                  Absolute value.\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %sfloor(x)%s                Floor (round down).\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %sceil(x)%s                 Ceiling (round up).\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %sround(x)%s                Round to nearest integer.\n", COLOR_CYAN, COLOR_RESET);
     printf("  %sArguments can be percentages: e.g., sin(30%%) == sin(0.3)%s\n\n", COLOR_DIM, COLOR_RESET);
 
     printf("%s%sExamples:%s\n", COLOR_BOLD, COLOR_YELLOW, COLOR_RESET);
     printf("  %s> 2 + 2%s\n", COLOR_DIM, COLOR_RESET);
     printf("  %s  4%s\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %s> 100 + 20%%%s               (100 + 0.20 * 100)\n", COLOR_DIM, COLOR_RESET);
+    printf("  %s> 100 + 20%%%s          (100 + 0.20 * 100)\n", COLOR_DIM, COLOR_RESET);
     printf("  %s  120%s\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %s> 100 * 50%%%s               (100 * 0.50)\n", COLOR_DIM, COLOR_RESET);
+    printf("  %s> 100 * 50%%%s          (100 * 0.50)\n", COLOR_DIM, COLOR_RESET);
     printf("  %s  50%s\n", COLOR_GREEN, COLOR_RESET);
     printf("  %s> sin(pi / 2)%s\n", COLOR_DIM, COLOR_RESET);
     printf("  %s  1%s\n", COLOR_GREEN, COLOR_RESET);
@@ -683,7 +683,6 @@ int tokenize(const char *input, Token *tokens, int max_tokens)
             if (*next_char == '=')
             {
                 // Ensure assignment is at the start or after an operator/paren? (No, can be like `y=x=5`)
-                // Simple check: Is this the *first* token or part of a chain?
                 // Current simple implementation allows `y=x=5`, handled in main loop logic.
                 // Here we just mark it as an assignment start token.
                 current_token->type = TOKEN_ASSIGNMENT;
@@ -827,8 +826,32 @@ int tokenize(const char *input, Token *tokens, int max_tokens)
             {
                 // Treat as part of the number or implicitly multiplying by -1/1.
                 // Simplest way for Shunting-Yard: Insert a zero operand before it.
+                // ** MODIFIED: Insert 0 and then the operator (+ or -) **
                 if (token_count >= max_tokens)
                 {
+                    fprintf(stderr, "%sError:%s Expression too complex (unary op).\n", COLOR_RED, COLOR_RESET);
+                    return -1;
+                }
+                tokens[token_count].type = TOKEN_NUMBER;
+                tokens[token_count].is_percentage = 0;
+                tokens[token_count].value.number = 0.0; // Insert 0
+                token_count++;
+
+                if (token_count >= max_tokens)
+                { // Check again before adding operator
+                    fprintf(stderr, "%sError:%s Expression too complex (unary op).\n", COLOR_RED, COLOR_RESET);
+                    return -1;
+                }
+                // Now add the actual operator (+ or -)
+                tokens[token_count].type = TOKEN_OPERATOR;
+                tokens[token_count].is_percentage = 0;
+                tokens[token_count].value.op = char_to_op(*p);
+                token_count++;
+                p++;
+                expecting_operand = 1; // Operator expects an operand next
+
+                /* Original Implicit Multiplication approach (alternative):
+                if (token_count >= max_tokens) {
                     fprintf(stderr, "%sError:%s Expression too complex (unary op).\n", COLOR_RED, COLOR_RESET);
                     return -1;
                 }
@@ -837,8 +860,7 @@ int tokenize(const char *input, Token *tokens, int max_tokens)
                 tokens[token_count].value.number = (*p == '-') ? -1.0 : 1.0; // Treat as implicit mult by -1/1
                 token_count++;
                 // Now add the multiplication operator
-                if (token_count >= max_tokens)
-                {
+                if (token_count >= max_tokens) {
                     fprintf(stderr, "%sError:%s Expression too complex (unary op).\n", COLOR_RED, COLOR_RESET);
                     return -1;
                 }
@@ -848,19 +870,6 @@ int tokenize(const char *input, Token *tokens, int max_tokens)
                 token_count++;
                 p++;
                 expecting_operand = 1; // Still expecting operand after implicit multiplication
-
-                /* Alternative: Insert 0 and then the operator
-                current_token->type = TOKEN_NUMBER;
-                current_token->value.number = 0.0;
-                token_count++;
-                if (token_count >= max_tokens) return -1; // Check again
-                // Now add the actual operator (+ or -)
-                tokens[token_count].type = TOKEN_OPERATOR;
-                tokens[token_count].is_percentage = 0;
-                tokens[token_count].value.op = char_to_op(*p);
-                token_count++;
-                p++;
-                expecting_operand = 1;
                 */
             }
             else
@@ -1149,8 +1158,9 @@ double evaluate_postfix(Token *postfix, int count)
                 // Percentages treated as decimals
                 double a_val = operand_a.is_percentage ? operand_a.num / 100.0 : operand_a.num;
                 double b_val = operand_b.is_percentage ? operand_b.num / 100.0 : operand_b.num;
-                if (fabs(b_val) < 1e-15)
-                { // Check for division by zero (use tolerance)
+                // ** MODIFIED: Direct check for exact zero **
+                if (b_val == 0.0)
+                {
                     fprintf(stderr, "%sError:%s Division by zero.\n", COLOR_RED, COLOR_RESET);
                     return NAN;
                 }
@@ -1174,8 +1184,9 @@ double evaluate_postfix(Token *postfix, int count)
                 {
                     fprintf(stderr, "%sWarning:%s Percentage ignored in modulo operation.\n", COLOR_YELLOW, COLOR_RESET);
                 }
-                if (fabs(operand_b.num) < 1e-15)
-                { // Check for modulo by zero
+                // ** MODIFIED: Direct check for exact zero **
+                if (operand_b.num == 0.0)
+                {
                     fprintf(stderr, "%sError:%s Modulo by zero.\n", COLOR_RED, COLOR_RESET);
                     return NAN;
                 }
@@ -1357,6 +1368,9 @@ double handle_assignment(const char *var_name, const char *expression)
             log_message("Assignment Error: Failed to store result %g in variable '%s'", result, var_name);
             return NAN; // Indicate failure, though calculation was okay
         }
+        // Update last_result and 'ans' only if assignment is successful
+        last_result = result;
+        set_variable("ans", result); // Keep 'ans' variable updated
         log_message("Assignment: %s = %g (Expression: '%s')", var_name, result, expression);
     }
     else
@@ -1648,6 +1662,21 @@ double evaluate_expression(const char *input)
     }
 
     return result;
+}
+
+/**
+ * @brief Cleans up floating point results that are very close to zero.
+ * @param value The double value to clean.
+ * @param epsilon The threshold below which values are considered zero.
+ * @return The cleaned value (0.0 if very close to zero, original value otherwise).
+ */
+double clean_near_zero(double value, double epsilon)
+{
+    if (fabs(value) < epsilon)
+    {
+        return 0.0; // Return exact zero if the value is within epsilon of zero
+    }
+    return value; // Otherwise return the original value
 }
 
 /* --- Terminal Raw Mode & Input Handling --- */
@@ -2070,4 +2099,4 @@ int main(void)
     // disableRawMode() is called automatically via atexit()
     return 0; // Success
 }
-#endif
+#endif // FOR_TESTING
