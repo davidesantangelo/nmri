@@ -5,6 +5,23 @@ All notable changes to the NMRI calculator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2025-03-31
+
+### Fixed
+
+-   Corrected division (`/`) and modulo (`%`) operations to properly handle division by exactly zero. This prevents potential errors and inaccurate results that could occur due to floating-point representation issues near zero.
+-   Ensured that the special `ans` variable and the internal memory of the last result are updated only *after* a variable assignment (e.g., `x = 1 + 2`) is fully and successfully completed.
+
+### Changed
+
+-   Improved the internal parsing logic for unary plus (`+`) and minus (`-`) operators for better consistency and potentially simpler evaluation flow.
+
+### Code Quality
+
+-   Minor internal code formatting adjustments and comment updates for clarity.
+-   Added the definition for an internal helper function (`clean_near_zero`) that was previously missing.
+
+
 ## [0.1.0] - 2025-03-30
 
 ### Added
