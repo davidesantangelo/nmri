@@ -31,6 +31,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#define _GNU_SOURCE // Define before including headers to potentially get SOCK_CLOEXEC etc.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,16 +41,18 @@
 #include <stdarg.h>
 #include <termios.h> // For terminal raw mode (Unix-like systems)
 #include <unistd.h>  // For read() and STDIN_FILENO
+#include <fcntl.h>   // Needed for fcntl
 
 /* --- Configuration Constants --- */
 
-#define MAX_TOKENS 100                  // Maximum tokens allowed in an expression
-#define MAX_IDENTIFIER_LEN 32           // Maximum length for variable/function names (increased from 20)
-#define MAX_VARIABLES 100               // Maximum number of user-defined variables
-#define HISTORY_SIZE 20                 // Number of commands to keep in history
-#define MAX_INPUT 256                   // Maximum length of user input line
-#define MAX_LOG_LINE 1024               // Maximum length of a single log line
-#define DEFAULT_LOG_FILENAME "nmri.log" // Default name for the log file
+#define MAX_TOKENS 100                            // Maximum tokens allowed in an expression
+#define MAX_IDENTIFIER_LEN 32                     // Maximum length for variable/function names (increased from 20)
+#define MAX_VARIABLES 100                         // Maximum number of user-defined variables
+#define HISTORY_SIZE 20                           // Number of commands to keep in history
+#define MAX_INPUT 256                             // Maximum length of user input line
+#define MAX_LOG_LINE 1024                         // Maximum length of a single log line
+#define DEFAULT_LOG_FILENAME "nmri.log"           // Default name for the log file
+#define CMD_LINE_EXPR_BUFFER_SIZE (MAX_INPUT * 2) // Buffer for concatenated cmd line args
 
 /* --- ANSI Color Codes --- */
 #define COLOR_RESET "\033[0m"
@@ -190,6 +193,33 @@ char log_path[MAX_INPUT] = DEFAULT_LOG_FILENAME; // Path to the log file
 // Terminal state (for raw mode)
 struct termios orig_termios; // Stores original terminal settings
 
+/* --- Function Prototypes --- */
+int init_logging(void);
+void log_session_start(void);
+void log_session_stop(void);
+void close_logging(void);
+void log_message(const char *format, ...);
+void show_log(int lines);
+OperatorType char_to_op(char c);
+int find_variable(const char *name);
+int set_variable(const char *name, double value);
+void show_help(void);
+void add_to_history(const char *cmd);
+void show_history(void);
+void show_variables(void);
+int tokenize(const char *input, Token *tokens, int max_tokens);
+int precedence(OperatorType op);
+int is_left_associative(OperatorType op);
+int shunting_yard(Token *tokens, int token_count, Token *output, int max_output);
+double evaluate_postfix(Token *postfix, int count);
+double handle_assignment(const char *var_name, const char *expression);
+int process_command(const char *input);
+double evaluate_expression(const char *input);
+double clean_near_zero(double value, double epsilon);
+void disableRawMode(void);
+void enableRawMode(void);
+void readCommand(char *buffer, int max_size);
+
 /* --- Logging Functions --- */
 
 /**
@@ -217,7 +247,6 @@ void log_session_start(void)
 {
     if (!logging_enabled || !init_logging())
         return;
-
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
     if (t)
@@ -236,7 +265,6 @@ void log_session_stop(void)
 {
     if (!logging_enabled || !log_file)
         return;
-
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
     if (t)
@@ -274,7 +302,6 @@ void log_message(const char *format, ...)
 {
     if (!logging_enabled || !init_logging())
         return;
-
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
     if (!t)
@@ -297,7 +324,6 @@ void log_message(const char *format, ...)
     {
         fprintf(log_file, "\n");
     }
-
     fflush(log_file); // Ensure immediate write
 }
 
@@ -315,7 +341,6 @@ void show_log(int lines)
         fclose(log_file);
         log_file = NULL; // Will be reopened in 'a' mode later
     }
-
     FILE *read_log = fopen(log_path, "r");
     if (!read_log)
     {
@@ -326,7 +351,6 @@ void show_log(int lines)
 
     int total_lines = 0;
     char buffer[MAX_LOG_LINE];
-
     // First pass: Count total lines
     while (fgets(buffer, sizeof(buffer), read_log))
     {
@@ -335,7 +359,6 @@ void show_log(int lines)
 
     // Calculate the starting line number
     int start_line = (total_lines > lines) ? (total_lines - lines) : 0;
-
     // Second pass: Rewind and skip to the starting line
     rewind(read_log);
     int current_line = 0;
@@ -376,7 +399,6 @@ void show_log(int lines)
         }
     }
     printf("%s%s=== End of Log ===%s\n", COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
-
     fclose(read_log);
     init_logging(); // Reopen in append mode for subsequent logs
 }
@@ -438,7 +460,6 @@ int set_variable(const char *name, double value)
 {
     if (name == NULL || name[0] == '\0')
         return -1; // Invalid name
-
     int index = find_variable(name);
     if (index >= 0)
     {
@@ -470,7 +491,6 @@ int set_variable(const char *name, double value)
 void show_help(void)
 {
     printf("\n%s%sNMRI Calculator Help%s\n\n", COLOR_BOLD, COLOR_YELLOW, COLOR_RESET);
-
     printf("%s%sCommands:%s\n", COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
     printf("  %sexit%s      Exit the calculator.\n", COLOR_GREEN, COLOR_RESET);
     printf("  %shelp%s      Show this help message.\n", COLOR_GREEN, COLOR_RESET);
@@ -487,7 +507,6 @@ void show_help(void)
     printf("  %slog off%s   Disable logging.\n", COLOR_GREEN, COLOR_RESET);
     printf("  %slog show%s  Show the last %d lines from the log file.\n", COLOR_GREEN, COLOR_RESET, HISTORY_SIZE);
     printf("  %slog file%s  Show the current log file path.\n\n", COLOR_GREEN, COLOR_RESET);
-
     printf("%s%sConstants:%s\n", COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
     printf("  %spi%s        Pi (π ≈ 3.14159...)\n", COLOR_MAGENTA, COLOR_RESET);
     printf("  %se%s         Euler's number (e ≈ 2.71828...)\n", COLOR_MAGENTA, COLOR_RESET);
@@ -500,34 +519,31 @@ void show_help(void)
     printf("  %sk%s         Boltzmann constant (J/K ≈ 1.380e-23)\n", COLOR_MAGENTA, COLOR_RESET);
     printf("  %sinf%s       Infinity.\n", COLOR_MAGENTA, COLOR_RESET);
     printf("  %sans%s       Result of the last successful calculation.\n\n", COLOR_MAGENTA, COLOR_RESET);
-
     printf("%s%sOperators:%s\n", COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
     printf("  %s+, -%s      Addition, Subtraction.\n", COLOR_BLUE, COLOR_RESET);
-    printf("            %sSupports percentages: 'A + B%%' means A + (B/100)*A%s\n", COLOR_DIM, COLOR_RESET);
+    printf("             %sSupports percentages: 'A + B%%' means A + (B/100)*A%s\n", COLOR_DIM, COLOR_RESET);
     printf("  %s*, /%s      Multiplication, Division.\n", COLOR_BLUE, COLOR_RESET);
-    printf("            %sSupports percentages: 'A * B%%' means A * (B/100)%s\n", COLOR_DIM, COLOR_RESET);
+    printf("             %sSupports percentages: 'A * B%%' means A * (B/100)%s\n", COLOR_DIM, COLOR_RESET);
     printf("  %s^%s         Power (right-associative).\n", COLOR_BLUE, COLOR_RESET);
     printf("  %s%%%s         Modulo (remainder).\n", COLOR_BLUE, COLOR_RESET);
     printf("  %s=%s         Assignment (e.g., 'x = 5 * 2'). Must be the first operator.\n\n", COLOR_BLUE, COLOR_RESET);
-
     printf("%s%sFunctions:%s (Arguments in radians unless specified)\n", COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
     printf("  %ssin(x), cos(x), tan(x)%s   Trigonometric functions.\n", COLOR_CYAN, COLOR_RESET);
     printf("  %sasin(x), acos(x), atan(x)%s Inverse trigonometric functions.\n", COLOR_CYAN, COLOR_RESET);
-    printf("  %slog(x), ln(x)%s           Natural logarithm.\n", COLOR_CYAN, COLOR_RESET);
-    printf("  %ssqrt(x)%s                 Square root.\n", COLOR_CYAN, COLOR_RESET);
-    printf("  %sexp(x)%s                  Exponential (e^x).\n", COLOR_CYAN, COLOR_RESET);
-    printf("  %sabs(x)%s                  Absolute value.\n", COLOR_CYAN, COLOR_RESET);
-    printf("  %sfloor(x)%s                Floor (round down).\n", COLOR_CYAN, COLOR_RESET);
-    printf("  %sceil(x)%s                 Ceiling (round up).\n", COLOR_CYAN, COLOR_RESET);
-    printf("  %sround(x)%s                Round to nearest integer.\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %slog(x), ln(x)%s            Natural logarithm.\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %ssqrt(x)%s                  Square root.\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %sexp(x)%s                   Exponential (e^x).\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %sabs(x)%s                   Absolute value.\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %sfloor(x)%s                 Floor (round down).\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %sceil(x)%s                  Ceiling (round up).\n", COLOR_CYAN, COLOR_RESET);
+    printf("  %sround(x)%s                 Round to nearest integer.\n", COLOR_CYAN, COLOR_RESET);
     printf("  %sArguments can be percentages: e.g., sin(30%%) == sin(0.3)%s\n\n", COLOR_DIM, COLOR_RESET);
-
     printf("%s%sExamples:%s\n", COLOR_BOLD, COLOR_YELLOW, COLOR_RESET);
     printf("  %s> 2 + 2%s\n", COLOR_DIM, COLOR_RESET);
     printf("  %s  4%s\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %s> 100 + 20%%%s          (100 + 0.20 * 100)\n", COLOR_DIM, COLOR_RESET);
+    printf("  %s> 100 + 20%%%s        (100 + 0.20 * 100)\n", COLOR_DIM, COLOR_RESET);
     printf("  %s  120%s\n", COLOR_GREEN, COLOR_RESET);
-    printf("  %s> 100 * 50%%%s          (100 * 0.50)\n", COLOR_DIM, COLOR_RESET);
+    printf("  %s> 100 * 50%%%s        (100 * 0.50)\n", COLOR_DIM, COLOR_RESET);
     printf("  %s  50%s\n", COLOR_GREEN, COLOR_RESET);
     printf("  %s> sin(pi / 2)%s\n", COLOR_DIM, COLOR_RESET);
     printf("  %s  1%s\n", COLOR_GREEN, COLOR_RESET);
@@ -557,14 +573,12 @@ void add_to_history(const char *cmd)
     {
         return;
     }
-
     if (history_count == HISTORY_SIZE)
     {
         // History is full, shift existing commands up
         memmove(command_history[0], command_history[1], (HISTORY_SIZE - 1) * MAX_INPUT);
         history_count--; // Make space for the new command
     }
-
     // Add the new command at the end
     strncpy(command_history[history_count], cmd, MAX_INPUT - 1);
     command_history[history_count][MAX_INPUT - 1] = '\0'; // Ensure null termination
@@ -658,12 +672,11 @@ int tokenize(const char *input, Token *tokens, int max_tokens)
         current_token->is_percentage = 0; // Default
 
         // Handle identifiers (functions, variables, constants, assignment start)
-        if (isalpha((unsigned char)*p) || *p == '_') // Allow identifiers to start with _
-        {
+        if (isalpha((unsigned char)*p) || *p == '_')
+        { // Allow identifiers to start with _
             const char *start = p;
             while (isalnum((unsigned char)*p) || *p == '_')
                 p++; // Read the whole identifier
-
             size_t len = p - start;
             if (len >= MAX_IDENTIFIER_LEN)
             {
@@ -671,7 +684,6 @@ int tokenize(const char *input, Token *tokens, int max_tokens)
                         COLOR_RED, COLOR_RESET, MAX_IDENTIFIER_LEN / 2, start, MAX_IDENTIFIER_LEN - 1);
                 return -1;
             }
-
             char identifier[MAX_IDENTIFIER_LEN];
             strncpy(identifier, start, len);
             identifier[len] = '\0';
@@ -762,7 +774,6 @@ int tokenize(const char *input, Token *tokens, int max_tokens)
                         break;
                     }
                 }
-
                 if (func != FUNC_INVALID)
                 {
                     // It's a function
@@ -791,8 +802,8 @@ int tokenize(const char *input, Token *tokens, int max_tokens)
             }
             if (current_token->type == TOKEN_NUMBER)
             {
-                expecting_operand = 0; // Constants and variables are operands
-            }
+                expecting_operand = 0;
+            } // Constants and variables are operands
             token_count++;
         }
         // Handle numbers (including decimals and percentages)
@@ -806,14 +817,12 @@ int tokenize(const char *input, Token *tokens, int max_tokens)
                 return -1;
             }
             current_token->type = TOKEN_NUMBER;
-
             // Check for percentage sign
             if (*end == '%')
             {
                 current_token->is_percentage = 1;
                 end++; // Consume the '%'
             }
-
             p = end; // Move parser position
             token_count++;
             expecting_operand = 0; // A number is an operand
@@ -849,28 +858,6 @@ int tokenize(const char *input, Token *tokens, int max_tokens)
                 token_count++;
                 p++;
                 expecting_operand = 1; // Operator expects an operand next
-
-                /* Original Implicit Multiplication approach (alternative):
-                if (token_count >= max_tokens) {
-                    fprintf(stderr, "%sError:%s Expression too complex (unary op).\n", COLOR_RED, COLOR_RESET);
-                    return -1;
-                }
-                tokens[token_count].type = TOKEN_NUMBER;
-                tokens[token_count].is_percentage = 0;
-                tokens[token_count].value.number = (*p == '-') ? -1.0 : 1.0; // Treat as implicit mult by -1/1
-                token_count++;
-                // Now add the multiplication operator
-                if (token_count >= max_tokens) {
-                    fprintf(stderr, "%sError:%s Expression too complex (unary op).\n", COLOR_RED, COLOR_RESET);
-                    return -1;
-                }
-                tokens[token_count].type = TOKEN_OPERATOR;
-                tokens[token_count].is_percentage = 0;
-                tokens[token_count].value.op = OP_MUL; // Multiply by -1 or 1
-                token_count++;
-                p++;
-                expecting_operand = 1; // Still expecting operand after implicit multiplication
-                */
             }
             else
             {
@@ -910,7 +897,6 @@ int tokenize(const char *input, Token *tokens, int max_tokens)
             return -1;
         }
     }
-
     return token_count; // Success
 }
 
@@ -930,8 +916,8 @@ int precedence(OperatorType op)
     case OP_DIV:
     case OP_MOD:
         return 2;
-    case OP_POW: // Power has the highest precedence
-        return 3;
+    case OP_POW:
+        return 3; // Power has the highest precedence
     default:
         return 0; // Should not happen for valid operators
     }
@@ -944,11 +930,7 @@ int precedence(OperatorType op)
  * @param op The operator type.
  * @return 1 if left-associative, 0 otherwise.
  */
-int is_left_associative(OperatorType op)
-{
-    // Only power is right-associative in this set
-    return op != OP_POW;
-}
+int is_left_associative(OperatorType op) { return op != OP_POW; }
 
 /**
  * @brief Converts an infix expression (token array) to postfix (RPN) using the Shunting-yard algorithm.
@@ -967,7 +949,6 @@ int shunting_yard(Token *tokens, int token_count, Token *output, int max_output)
     for (int i = 0; i < token_count; i++)
     {
         Token token = tokens[i];
-
         switch (token.type)
         {
         case TOKEN_NUMBER:
@@ -979,7 +960,6 @@ int shunting_yard(Token *tokens, int token_count, Token *output, int max_output)
             }
             output[output_count++] = token;
             break;
-
         case TOKEN_FUNCTION:
             // Functions go onto the operator stack
             if (op_top >= MAX_TOKENS - 1)
@@ -989,7 +969,6 @@ int shunting_yard(Token *tokens, int token_count, Token *output, int max_output)
             }
             op_stack[++op_top] = token;
             break;
-
         case TOKEN_OPERATOR:
             // Pop operators with higher or equal precedence (respecting associativity)
             while (op_top >= 0 && op_stack[op_top].type == TOKEN_OPERATOR &&
@@ -1011,7 +990,6 @@ int shunting_yard(Token *tokens, int token_count, Token *output, int max_output)
             }
             op_stack[++op_top] = token;
             break;
-
         case TOKEN_LPAREN:
             // Push left parenthesis onto the operator stack
             if (op_top >= MAX_TOKENS - 1)
@@ -1021,7 +999,6 @@ int shunting_yard(Token *tokens, int token_count, Token *output, int max_output)
             }
             op_stack[++op_top] = token;
             break;
-
         case TOKEN_RPAREN:
             // Pop operators until a matching left parenthesis is found
             while (op_top >= 0 && op_stack[op_top].type != TOKEN_LPAREN)
@@ -1033,17 +1010,14 @@ int shunting_yard(Token *tokens, int token_count, Token *output, int max_output)
                 }
                 output[output_count++] = op_stack[op_top--]; // Pop from stack to output
             }
-
             // Check for mismatched parentheses
             if (op_top < 0)
             {
                 fprintf(stderr, "%sError:%s Mismatched parentheses (extra right parenthesis?).\n", COLOR_RED, COLOR_RESET);
                 return -1;
             }
-
             // Pop the left parenthesis itself (discard it)
             op_top--;
-
             // If the token before '(' was a function, pop it to output
             if (op_top >= 0 && op_stack[op_top].type == TOKEN_FUNCTION)
             {
@@ -1055,17 +1029,14 @@ int shunting_yard(Token *tokens, int token_count, Token *output, int max_output)
                 output[output_count++] = op_stack[op_top--];
             }
             break;
-
         case TOKEN_ASSIGNMENT: // Should ideally be handled before shunting yard
             fprintf(stderr, "%sInternal Error:%s Assignment token found in shunting yard.\n", COLOR_RED, COLOR_RESET);
             return -1;
-
         case TOKEN_VARIABLE: // Should have been resolved to TOKEN_NUMBER by tokenizer
             fprintf(stderr, "%sInternal Error:%s Variable token found in shunting yard.\n", COLOR_RED, COLOR_RESET);
             return -1;
         }
     }
-
     // After processing all input tokens, pop any remaining operators from the stack to the output
     while (op_top >= 0)
     {
@@ -1082,7 +1053,6 @@ int shunting_yard(Token *tokens, int token_count, Token *output, int max_output)
         }
         output[output_count++] = op_stack[op_top--];
     }
-
     return output_count; // Success, return number of tokens in postfix expression
 }
 
@@ -1100,7 +1070,6 @@ double evaluate_postfix(Token *postfix, int count)
     for (int i = 0; i < count; i++)
     {
         Token token = postfix[i];
-
         if (token.type == TOKEN_NUMBER)
         {
             // Push numbers onto the stack
@@ -1120,84 +1089,56 @@ double evaluate_postfix(Token *postfix, int count)
                         COLOR_RED, COLOR_RESET, "+-*/^%"[token.value.op]); // Simple way to get char
                 return NAN;
             }
-
-            Value operand_b = stack[top--]; // Pop second operand
-            Value operand_a = stack[top--]; // Pop first operand
+            Value op_b = stack[top--]; // Pop second operand
+            Value op_a = stack[top--]; // Pop first operand
             double result;
-
             // Perform the operation
             switch (token.value.op)
             {
             case OP_ADD:
-                // Special percentage handling: a + b% = a + (b/100 * a)
-                if (operand_b.is_percentage)
-                    result = operand_a.num + (operand_b.num / 100.0 * operand_a.num);
-                else
-                    result = operand_a.num + operand_b.num;
+                result = op_b.is_percentage ? op_a.num + (op_b.num / 100.0 * op_a.num) : op_a.num + op_b.num;
                 break;
-
             case OP_SUB:
-                // Special percentage handling: a - b% = a - (b/100 * a)
-                if (operand_b.is_percentage)
-                    result = operand_a.num - (operand_b.num / 100.0 * operand_a.num);
-                else
-                    result = operand_a.num - operand_b.num;
+                result = op_b.is_percentage ? op_a.num - (op_b.num / 100.0 * op_a.num) : op_a.num - op_b.num;
                 break;
-
             case OP_MUL:
             {
-                // Percentages treated as decimals: a% * b = (a/100) * b, a * b% = a * (b/100), a% * b% = (a/100) * (b/100)
-                double a_val = operand_a.is_percentage ? operand_a.num / 100.0 : operand_a.num;
-                double b_val = operand_b.is_percentage ? operand_b.num / 100.0 : operand_b.num;
-                result = a_val * b_val;
+                double a = op_a.is_percentage ? op_a.num / 100.0 : op_a.num;
+                double b = op_b.is_percentage ? op_b.num / 100.0 : op_b.num;
+                result = a * b;
             }
             break;
-
             case OP_DIV:
             {
-                // Percentages treated as decimals
-                double a_val = operand_a.is_percentage ? operand_a.num / 100.0 : operand_a.num;
-                double b_val = operand_b.is_percentage ? operand_b.num / 100.0 : operand_b.num;
-                // ** MODIFIED: Direct check for exact zero **
-                if (b_val == 0.0)
+                double a = op_a.is_percentage ? op_a.num / 100.0 : op_a.num;
+                double b = op_b.is_percentage ? op_b.num / 100.0 : op_b.num;
+                if (b == 0.0)
                 {
                     fprintf(stderr, "%sError:%s Division by zero.\n", COLOR_RED, COLOR_RESET);
                     return NAN;
                 }
-                result = a_val / b_val;
+                result = a / b;
             }
             break;
-
             case OP_POW:
-                // Percentage handling for power might be ambiguous. Here, base/exponent are treated as raw numbers.
-                // If a% ^ b is needed, it should likely be entered as (a/100)^b.
-                if (operand_a.is_percentage || operand_b.is_percentage)
-                {
-                    fprintf(stderr, "%sWarning:%s Percentage ignored in power operation. Use explicit division (e.g., (a/100)^b).\n", COLOR_YELLOW, COLOR_RESET);
-                }
-                result = pow(operand_a.num, operand_b.num);
+                if (op_a.is_percentage || op_b.is_percentage)
+                    fprintf(stderr, "%sWarning:%s Percentage ignored in power operation.\n", COLOR_YELLOW, COLOR_RESET);
+                result = pow(op_a.num, op_b.num);
                 break;
-
             case OP_MOD:
-                // Percentage handling for modulo might be ambiguous. Treat as raw numbers.
-                if (operand_a.is_percentage || operand_b.is_percentage)
-                {
+                if (op_a.is_percentage || op_b.is_percentage)
                     fprintf(stderr, "%sWarning:%s Percentage ignored in modulo operation.\n", COLOR_YELLOW, COLOR_RESET);
-                }
-                // ** MODIFIED: Direct check for exact zero **
-                if (operand_b.num == 0.0)
+                if (op_b.num == 0.0)
                 {
                     fprintf(stderr, "%sError:%s Modulo by zero.\n", COLOR_RED, COLOR_RESET);
                     return NAN;
                 }
-                result = fmod(operand_a.num, operand_b.num);
+                result = fmod(op_a.num, op_b.num);
                 break;
-
             default:
-                fprintf(stderr, "%sInternal Error:%s Unknown operator type during evaluation.\n", COLOR_RED, COLOR_RESET);
+                fprintf(stderr, "%sInternal Error:%s Unknown operator type.\n", COLOR_RED, COLOR_RESET);
                 return NAN;
             }
-
             // Push the result back onto the stack (result is never a percentage itself)
             if (top >= MAX_TOKENS - 1)
             { // Check before pushing
@@ -1215,11 +1156,9 @@ double evaluate_postfix(Token *postfix, int count)
                 // Could lookup function name here for better error message
                 return NAN;
             }
-
-            Value argument = stack[top--];                                                 // Pop argument
-            double arg_val = argument.is_percentage ? argument.num / 100.0 : argument.num; // Convert percentage if needed
+            Value arg = stack[top--];                                       // Pop argument
+            double arg_val = arg.is_percentage ? arg.num / 100.0 : arg.num; // Convert percentage if needed
             double result;
-
             // Evaluate the function
             switch (token.value.func)
             {
@@ -1233,12 +1172,11 @@ double evaluate_postfix(Token *postfix, int count)
             case FUNC_TAN:
                 result = tan(arg_val);
                 break;
-
             // Inverse trig functions
             case FUNC_ASIN:
                 if (arg_val < -1.0 || arg_val > 1.0)
                 {
-                    fprintf(stderr, "%sError:%s Arcsin argument must be between -1 and 1.\n", COLOR_RED, COLOR_RESET);
+                    fprintf(stderr, "%sError:%s Arcsin argument out of range [-1, 1].\n", COLOR_RED, COLOR_RESET);
                     return NAN;
                 }
                 result = asin(arg_val);
@@ -1246,7 +1184,7 @@ double evaluate_postfix(Token *postfix, int count)
             case FUNC_ACOS:
                 if (arg_val < -1.0 || arg_val > 1.0)
                 {
-                    fprintf(stderr, "%sError:%s Arccos argument must be between -1 and 1.\n", COLOR_RED, COLOR_RESET);
+                    fprintf(stderr, "%sError:%s Arccos argument out of range [-1, 1].\n", COLOR_RED, COLOR_RESET);
                     return NAN;
                 }
                 result = acos(arg_val);
@@ -1254,12 +1192,11 @@ double evaluate_postfix(Token *postfix, int count)
             case FUNC_ATAN:
                 result = atan(arg_val);
                 break;
-
             // Log, Sqrt, Exp
-            case FUNC_LOG: // Natural Log (ln)
+            case FUNC_LOG:
                 if (arg_val <= 0.0)
                 {
-                    fprintf(stderr, "%sError:%s Logarithm requires a positive argument.\n", COLOR_RED, COLOR_RESET);
+                    fprintf(stderr, "%sError:%s Logarithm requires positive argument.\n", COLOR_RED, COLOR_RESET);
                     return NAN;
                 }
                 result = log(arg_val);
@@ -1267,7 +1204,7 @@ double evaluate_postfix(Token *postfix, int count)
             case FUNC_SQRT:
                 if (arg_val < 0.0)
                 {
-                    fprintf(stderr, "%sError:%s Square root requires a non-negative argument.\n", COLOR_RED, COLOR_RESET);
+                    fprintf(stderr, "%sError:%s Square root requires non-negative argument.\n", COLOR_RED, COLOR_RESET);
                     return NAN;
                 }
                 result = sqrt(arg_val);
@@ -1275,7 +1212,6 @@ double evaluate_postfix(Token *postfix, int count)
             case FUNC_EXP:
                 result = exp(arg_val);
                 break;
-
             // Utility functions
             case FUNC_ABS:
                 result = fabs(arg_val);
@@ -1289,12 +1225,10 @@ double evaluate_postfix(Token *postfix, int count)
             case FUNC_ROUND:
                 result = round(arg_val);
                 break;
-
             default: // Includes FUNC_INVALID
-                fprintf(stderr, "%sInternal Error:%s Unknown function type during evaluation.\n", COLOR_RED, COLOR_RESET);
+                fprintf(stderr, "%sInternal Error:%s Unknown function type.\n", COLOR_RED, COLOR_RESET);
                 return NAN;
             }
-
             // Push the result back onto the stack (result is never a percentage)
             if (top >= MAX_TOKENS - 1)
             { // Check before pushing
@@ -1304,21 +1238,17 @@ double evaluate_postfix(Token *postfix, int count)
             stack[++top] = (Value){.num = result, .is_percentage = 0};
         }
     }
-
     // After processing all tokens, the final result should be the only item on the stack
     if (top != 0)
     {
         // This often indicates an invalid expression structure (e.g., "2 3 + 4")
         fprintf(stderr, "%sError:%s Invalid expression structure (stack top %d, expected 0).\n", COLOR_RED, COLOR_RESET, top);
-        // Print stack for debugging?
-        // for(int i=0; i<=top; ++i) printf("Stack[%d] = %g (%d)\n", i, stack[i].num, stack[i].is_percentage);
         return NAN;
     }
-
     // Return the final result (handle potential remaining percentage)
     // This shouldn't happen if operators/functions clear the flag, but safety check:
-    Value final_result = stack[0];
-    return final_result.is_percentage ? final_result.num / 100.0 : final_result.num;
+    Value final_val = stack[0];
+    return final_val.is_percentage ? final_val.num / 100.0 : final_val.num;
 }
 
 /**
@@ -1331,15 +1261,13 @@ double evaluate_postfix(Token *postfix, int count)
  */
 double handle_assignment(const char *var_name, const char *expression)
 {
-    Token tokens[MAX_TOKENS];
-    Token postfix[MAX_TOKENS];
-
+    Token tokens[MAX_TOKENS], postfix[MAX_TOKENS];
     // 1. Tokenize the right-hand side expression
     int token_count = tokenize(expression, tokens, MAX_TOKENS);
     if (token_count < 0)
     {
         log_message("Assignment Error: Tokenization failed for '%s = %s'", var_name, expression);
-        return NAN; // Tokenization error
+        return NAN;
     }
     if (token_count == 0)
     {
@@ -1347,26 +1275,22 @@ double handle_assignment(const char *var_name, const char *expression)
         log_message("Assignment Error: Missing expression for '%s'", var_name);
         return NAN;
     }
-
     // 2. Convert the expression to postfix (RPN)
     int postfix_count = shunting_yard(tokens, token_count, postfix, MAX_TOKENS);
     if (postfix_count < 0)
     {
         log_message("Assignment Error: Shunting-yard failed for '%s = %s'", var_name, expression);
-        return NAN; // Shunting-yard error
+        return NAN;
     }
-
     // 3. Evaluate the postfix expression
     double result = evaluate_postfix(postfix, postfix_count);
-
     // 4. Assign the result to the variable if evaluation was successful
     if (!isnan(result))
     {
         if (set_variable(var_name, result) < 0)
         {
-            // Error setting variable (e.g., storage full) - message printed by set_variable
             log_message("Assignment Error: Failed to store result %g in variable '%s'", result, var_name);
-            return NAN; // Indicate failure, though calculation was okay
+            return NAN;
         }
         // Update last_result and 'ans' only if assignment is successful
         last_result = result;
@@ -1377,7 +1301,6 @@ double handle_assignment(const char *var_name, const char *expression)
     {
         log_message("Assignment Error: Evaluation failed for '%s = %s'", var_name, expression);
     }
-
     return result; // Return the calculated value (or NAN if evaluation failed)
 }
 
@@ -1410,11 +1333,11 @@ int process_command(const char *input)
     }
     if (strcmp(trimmed_input, "exit") == 0 || strcmp(trimmed_input, "quit") == 0)
     {
-        return -1; // Signal to exit main loop
+        return -1;
     }
     if (strcmp(trimmed_input, "clear") == 0 || strcmp(trimmed_input, "cls") == 0)
     {
-        printf("\033[2J\033[H"); // ANSI clear screen and move cursor home
+        printf("\033[2J\033[H");
         return 1;
     }
     if (strcmp(trimmed_input, "history") == 0)
@@ -1449,8 +1372,8 @@ int process_command(const char *input)
     if (strcmp(trimmed_input, "mr") == 0)
     {
         printf("Recalled from memory: %g\n", memory);
-        last_result = memory;             // Update 'ans'
-        set_variable("ans", last_result); // Also update the 'ans' variable
+        last_result = memory;
+        set_variable("ans", last_result);
         log_message("Memory Recall (mr): %g", memory);
         return 1;
     }
@@ -1461,22 +1384,18 @@ int process_command(const char *input)
         log_message("Memory Cleared (mc)");
         return 1;
     }
-
     // Handle 'store <varname>' command
     if (strncmp(trimmed_input, "store ", 6) == 0)
     {
         const char *var_name = trimmed_input + 6;
         while (isspace((unsigned char)*var_name))
-            var_name++; // Skip space after "store"
-
+            var_name++;
         if (*var_name == '\0')
         {
             fprintf(stderr, "%sError:%s Missing variable name for 'store' command.\n", COLOR_RED, COLOR_RESET);
             log_message("Command Error: Missing variable name for store");
-            return 1; // Handled, but was an error
+            return 1;
         }
-
-        // Extract variable name (basic validation)
         char name_buf[MAX_IDENTIFIER_LEN] = {0};
         int i = 0;
         const char *name_start = var_name;
@@ -1496,16 +1415,13 @@ int process_command(const char *input)
             }
             name_buf[i++] = *var_name++;
         }
-        name_buf[i] = '\0'; // Ensure null termination
-
+        name_buf[i] = '\0';
         if (*var_name != '\0' && !isspace((unsigned char)*var_name))
         {
             fprintf(stderr, "%sError:%s Variable name '%s...' too long or invalid for 'store'.\n", COLOR_RED, COLOR_RESET, name_buf);
             log_message("Command Error: Store variable name too long or invalid '%s'", name_buf);
             return 1;
         }
-
-        // Store the last result
         if (set_variable(name_buf, last_result) >= 0)
         {
             printf("Stored %g in variable '%s'\n", last_result, name_buf);
@@ -1513,19 +1429,16 @@ int process_command(const char *input)
         }
         else
         {
-            // Error message already printed by set_variable if max vars reached
             log_message("Command Error: Failed to store %g in variable '%s'", last_result, name_buf);
         }
-        return 1; // Command handled
+        return 1;
     }
-
     // Handle 'log ...' commands
     if (strncmp(trimmed_input, "log ", 4) == 0)
     {
         const char *subcommand = trimmed_input + 4;
         while (isspace((unsigned char)*subcommand))
             subcommand++;
-
         if (strcmp(subcommand, "on") == 0)
         {
             if (!logging_enabled)
@@ -1534,7 +1447,7 @@ int process_command(const char *input)
                 {
                     logging_enabled = 1;
                     printf("%sLogging enabled.%s To file: %s\n", COLOR_GREEN, COLOR_RESET, log_path);
-                    log_session_start(); // Log the start immediately
+                    log_session_start();
                     log_message("Command: Logging enabled");
                 }
             }
@@ -1549,11 +1462,9 @@ int process_command(const char *input)
             if (logging_enabled)
             {
                 log_message("Command: Logging disabled");
-                log_session_stop(); // Log the stop before disabling
+                log_session_stop();
                 logging_enabled = 0;
                 printf("%sLogging disabled.%s\n", COLOR_YELLOW, COLOR_RESET);
-                // Keep log_file pointer open if it was successfully opened before,
-                // so 'log on' doesn't need to reopen. Closing handled at exit.
             }
             else
             {
@@ -1564,7 +1475,7 @@ int process_command(const char *input)
         if (strcmp(subcommand, "show") == 0)
         {
             log_message("Command: Show log requested");
-            show_log(HISTORY_SIZE); // Show recent log entries
+            show_log(HISTORY_SIZE);
             return 1;
         }
         if (strcmp(subcommand, "file") == 0)
@@ -1573,7 +1484,6 @@ int process_command(const char *input)
             log_message("Command: Log file path requested (%s)", log_path);
             return 1;
         }
-        // Allow setting log file path (simple version, no validation)
         if (strncmp(subcommand, "file ", 5) == 0)
         {
             const char *new_path = subcommand + 5;
@@ -1581,19 +1491,19 @@ int process_command(const char *input)
                 new_path++;
             if (*new_path)
             {
-                close_logging(); // Close current log file if open
+                close_logging();
                 strncpy(log_path, new_path, sizeof(log_path) - 1);
                 log_path[sizeof(log_path) - 1] = '\0';
                 printf("Log file path set to: %s%s%s\n", COLOR_YELLOW, log_path, COLOR_RESET);
                 if (logging_enabled)
-                { // If logging was on, re-initialize
+                {
                     init_logging();
-                    log_session_start(); // Start new session marker in new file
+                    log_session_start();
                     log_message("Command: Log file path changed to %s", log_path);
                 }
                 else
                 {
-                    log_message("Command: Log file path set to %s (logging is off)", log_path); // Log only if possible
+                    log_message("Command: Log file path set to %s (logging is off)", log_path);
                 }
             }
             else
@@ -1602,12 +1512,10 @@ int process_command(const char *input)
             }
             return 1;
         }
-
         fprintf(stderr, "%sError:%s Unknown 'log' subcommand '%s'. Use 'on', 'off', 'show', 'file', or 'file <path>'.\n", COLOR_RED, COLOR_RESET, subcommand);
         log_message("Command Error: Unknown log subcommand '%s'", subcommand);
         return 1;
     }
-
     // If none of the above, it's not a recognized command
     return 0;
 }
@@ -1621,46 +1529,38 @@ int process_command(const char *input)
  */
 double evaluate_expression(const char *input)
 {
-    Token tokens[MAX_TOKENS];
-    Token postfix[MAX_TOKENS];
-
+    Token tokens[MAX_TOKENS], postfix[MAX_TOKENS];
     // 1. Tokenize
     int token_count = tokenize(input, tokens, MAX_TOKENS);
     if (token_count < 0)
     {
         log_message("Evaluation Error: Tokenization failed for '%s'", input);
-        return NAN; // Tokenization error
+        return NAN;
     }
     if (token_count == 0)
     {
-        // Empty expression is not an error, just results in nothing (or maybe 0?)
-        // Let's treat it as invalid for evaluation.
         return NAN;
-    }
-
+    } // Empty expression is invalid for evaluation
     // 2. Convert to Postfix (RPN)
     int postfix_count = shunting_yard(tokens, token_count, postfix, MAX_TOKENS);
     if (postfix_count < 0)
     {
         log_message("Evaluation Error: Shunting-yard failed for '%s'", input);
-        return NAN; // Shunting-yard error
+        return NAN;
     }
-
     // 3. Evaluate Postfix
     double result = evaluate_postfix(postfix, postfix_count);
-
     // Update global state if successful
     if (!isnan(result))
     {
         last_result = result;
-        set_variable("ans", result); // Keep 'ans' variable updated
+        set_variable("ans", result);
         log_message("Result: %s = %g", input, result);
     }
     else
     {
         log_message("Evaluation Error: Postfix evaluation failed for '%s'", input);
     }
-
     return result;
 }
 
@@ -1672,11 +1572,7 @@ double evaluate_expression(const char *input)
  */
 double clean_near_zero(double value, double epsilon)
 {
-    if (fabs(value) < epsilon)
-    {
-        return 0.0; // Return exact zero if the value is within epsilon of zero
-    }
-    return value; // Otherwise return the original value
+    return (fabs(value) < epsilon) ? 0.0 : value;
 }
 
 /* --- Terminal Raw Mode & Input Handling --- */
@@ -1704,10 +1600,8 @@ void enableRawMode(void)
         perror("Error getting terminal attributes");
         exit(EXIT_FAILURE);
     }
-
     // Register the cleanup function to restore settings on exit
     atexit(disableRawMode);
-
     // Create a copy and modify it for raw mode
     struct termios raw = orig_termios;
     // ICANON: Disable canonical mode (don't wait for Enter)
@@ -1717,7 +1611,6 @@ void enableRawMode(void)
     // VTIME = 0: read() waits indefinitely
     raw.c_cc[VMIN] = 1;
     raw.c_cc[VTIME] = 0;
-
     // Apply the modified attributes
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1)
     {
@@ -1745,15 +1638,9 @@ void enableRawMode(void)
 void readCommand(char *buffer, int max_size)
 {
     enableRawMode(); // Switch to raw mode for character-by-character input
-
-    int pos = 0;                         // Current cursor position within the buffer
-    int len = 0;                         // Current length of the command in the buffer
-    int history_pos = history_count;     // Position in history (points *after* last item initially)
+    int pos = 0, len = 0, history_pos = history_count, saved_current = 0;
     char current_typed[MAX_INPUT] = {0}; // Buffer to save current input when navigating history
-    int saved_current = 0;               // Flag if current_typed has been saved
-
-    memset(buffer, 0, max_size); // Clear the input buffer initially
-
+    memset(buffer, 0, max_size);         // Clear the input buffer initially
     // Print the prompt
     printf("%s%s■%s ", COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
     fflush(stdout);
@@ -1764,48 +1651,44 @@ void readCommand(char *buffer, int max_size)
         // Read one character from standard input
         if (read(STDIN_FILENO, &c, 1) != 1)
         {
-            // Read error or EOF, break loop (maybe handle EINTR?)
             perror("readCommand read error");
             break;
         }
 
         // Handle character input
         if (c == KEY_ENTER || c == KEY_RETURN)
-        {                 // Enter pressed
-            printf("\n"); // Move to the next line in the terminal
-            break;        // Finish reading
-        }
+        {
+            printf("\n");
+            break;
+        } // Enter pressed
         else if (c == KEY_BACKSPACE)
         { // Backspace pressed
             if (pos > 0)
             {
-                memmove(buffer + pos - 1, buffer + pos, len - pos); // Shift chars right of cursor
+                memmove(buffer + pos - 1, buffer + pos, len - pos);
                 len--;
                 pos--;
-                buffer[len] = '\0'; // Null-terminate
+                buffer[len] = '\0';
                 // Redraw line: move cursor left, print shifted part, print space, move cursor back
-                printf("\033[1D");                 // Move cursor left
-                printf("%s ", buffer + pos);       // Print shifted part + space to clear last char
-                printf("\033[%dD", len - pos + 1); // Move cursor back to correct position
+                printf("\033[1D%s \033[%dD", buffer + pos, len - pos + 1);
             }
         }
         else if (c == KEY_CTRL_D)
         { // Ctrl+D (Delete character under cursor)
             if (pos < len)
             {
-                memmove(buffer + pos, buffer + pos + 1, len - pos - 1); // Shift chars left
+                memmove(buffer + pos, buffer + pos + 1, len - pos - 1);
                 len--;
                 buffer[len] = '\0';
                 // Redraw line: print shifted part, print space, move cursor back
-                printf("%s ", buffer + pos);
-                printf("\033[%dD", len - pos + 1);
+                printf("%s \033[%dD", buffer + pos, len - pos + 1);
             }
         }
         else if (c == KEY_CTRL_A)
         { // Ctrl+A (Move cursor to beginning of line)
             if (pos > 0)
             {
-                printf("\033[%dD", pos); // Move cursor left 'pos' times
+                printf("\033[%dD", pos);
                 pos = 0;
             }
         }
@@ -1813,7 +1696,7 @@ void readCommand(char *buffer, int max_size)
         { // Ctrl+E (Move cursor to end of line)
             if (pos < len)
             {
-                printf("\033[%dC", len - pos); // Move cursor right 'len - pos' times
+                printf("\033[%dC", len - pos);
                 pos = len;
             }
         }
@@ -1821,12 +1704,10 @@ void readCommand(char *buffer, int max_size)
         { // Escape sequence (likely arrow keys or other special keys)
             char seq[3];
             // Read the next two characters (e.g., '[A' for up arrow)
-            // Use non-blocking reads or timeouts? For simplicity, assume they follow quickly.
             if (read(STDIN_FILENO, &seq[0], 1) != 1)
-                continue; // Read '['
+                continue;
             if (read(STDIN_FILENO, &seq[1], 1) != 1)
-                continue; // Read A/B/C/D/etc.
-
+                continue;
             if (seq[0] == '[')
             {
                 if (seq[1] >= '0' && seq[1] <= '9')
@@ -1842,8 +1723,7 @@ void readCommand(char *buffer, int max_size)
                             memmove(buffer + pos, buffer + pos + 1, len - pos - 1);
                             len--;
                             buffer[len] = '\0';
-                            printf("%s ", buffer + pos);
-                            printf("\033[%dD", len - pos + 1);
+                            printf("%s \033[%dD", buffer + pos, len - pos + 1);
                         }
                     }
                     // Add more cases for Home (^[1~), End (^[4~) if needed
@@ -1855,7 +1735,6 @@ void readCommand(char *buffer, int max_size)
                     case 'A': // Up Arrow (History Previous)
                         if (!saved_current && len > 0)
                         {
-                            // Save the currently typed line before replacing it
                             strncpy(current_typed, buffer, MAX_INPUT - 1);
                             current_typed[MAX_INPUT - 1] = '\0';
                             saved_current = 1;
@@ -1864,17 +1743,16 @@ void readCommand(char *buffer, int max_size)
                         {
                             history_pos--;
                             // Clear current line display
-                            printf("\r%s%s■%s ", COLOR_BOLD, COLOR_CYAN, COLOR_RESET); // Prompt
+                            printf("\r%s%s■%s ", COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
                             for (int i = 0; i < len; i++)
-                                printf(" ");                                           // Overwrite with spaces
-                            printf("\r%s%s■%s ", COLOR_BOLD, COLOR_CYAN, COLOR_RESET); // Prompt again
-
+                                printf(" ");
+                            printf("\r%s%s■%s ", COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
                             // Load history item
                             strncpy(buffer, command_history[history_pos], max_size - 1);
                             buffer[max_size - 1] = '\0';
                             len = strlen(buffer);
-                            pos = len;            // Move cursor to end
-                            printf("%s", buffer); // Print history item
+                            pos = len;
+                            printf("%s", buffer);
                         }
                         break;
                     case 'B': // Down Arrow (History Next)
@@ -1886,7 +1764,6 @@ void readCommand(char *buffer, int max_size)
                             for (int i = 0; i < len; i++)
                                 printf(" ");
                             printf("\r%s%s■%s ", COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
-
                             // Load next history item or the saved current input
                             if (history_pos == history_count && saved_current)
                             {
@@ -1900,28 +1777,28 @@ void readCommand(char *buffer, int max_size)
                             }
                             else
                             {
-                                buffer[0] = '\0';  // End of history, clear buffer
-                                saved_current = 0; // No longer need saved buffer
-                            }
+                                buffer[0] = '\0';
+                                saved_current = 0;
+                            } // End of history, clear buffer
                             len = strlen(buffer);
                             pos = len;
                             printf("%s", buffer);
                         }
                         break;
-                    case 'C': // Right Arrow
+                    case 'C':
                         if (pos < len)
                         {
-                            printf("\033[1C"); // Move cursor right
+                            printf("\033[1C");
                             pos++;
                         }
-                        break;
-                    case 'D': // Left Arrow
+                        break; // Right Arrow
+                    case 'D':
                         if (pos > 0)
                         {
-                            printf("\033[1D"); // Move cursor left
+                            printf("\033[1D");
                             pos--;
                         }
-                        break;
+                        break; // Left Arrow
                     } // End switch(seq[1])
                 } // End else (seq[1] is not 0-9)
             } // End if (seq[0] == '[')
@@ -1934,7 +1811,7 @@ void readCommand(char *buffer, int max_size)
                 buffer[pos++] = c;
                 len++;
                 buffer[len] = '\0';
-                printf("%c", c); // Just print the character
+                printf("%c", c);
             }
             else
             {                                                       // Inserting in the middle
@@ -1948,10 +1825,8 @@ void readCommand(char *buffer, int max_size)
                 printf("\033[%dD", len - pos);
             }
         }
-
         fflush(stdout); // Ensure prompt and input are displayed immediately
     }
-
     disableRawMode();   // Restore terminal settings before returning
     buffer[len] = '\0'; // Ensure final null termination
 }
@@ -1959,144 +1834,192 @@ void readCommand(char *buffer, int max_size)
 /* --- Main Function --- */
 
 #ifndef FOR_TESTING // Allow compiling without main for testing purposes
-int main(void)
+int main(int argc, char *argv[])
 {
-    printf("\n%sNMRI Command Line Calculator%s\n", COLOR_BOLD, COLOR_RESET);
-    printf("Type '%shelp%s' for instructions, '%sexit%s' to quit.\n\n",
-           COLOR_GREEN, COLOR_RESET, COLOR_GREEN, COLOR_RESET);
+    // --- Option Parsing ---
+    // int opt; // Removed unused variable
+    // Add getopt loop here if options like -h, -v, -l logfile are needed
+    // For now, assume optind starts at 1 if no options are parsed
+    // TODO: Implement getopt for options if needed later
+    optind = 1; // Reset optind if getopt is not used or finished
 
-    // Initialize 'ans' variable
+    // Initialize 'ans' and logging
     set_variable("ans", 0.0);
-    // Initialize logging (open file if possible, but don't enable yet)
-    init_logging();
+    init_logging(); // Initialize logging system
 
-    while (1)
+    // --- Check for non-option arguments (the expression) ---
+    if (optind < argc)
     {
-        char input[MAX_INPUT];
+        // --- Command-Line Expression Mode ---
+        char expression_buffer[CMD_LINE_EXPR_BUFFER_SIZE];
+        expression_buffer[0] = '\0';
+        size_t current_len = 0;
 
-        // Read user input with line editing
-        readCommand(input, sizeof(input));
-
-        // Trim whitespace (again, just in case readCommand leaves some)
-        char *start = input;
-        while (isspace((unsigned char)*start))
-            start++;
-        if (*start == '\0')
+        // Concatenate all non-option arguments
+        for (int i = optind; i < argc; i++)
         {
-            continue; // Ignore empty lines
-        }
-        // No need to trim end here as readCommand handles it well
-
-        // Add non-empty command to history
-        add_to_history(start);
-        // Log the raw input
-        log_message("User input: %s", start);
-
-        // Process built-in commands first
-        int cmd_result = process_command(start);
-        if (cmd_result == 1)
-        {
-            continue; // Command was handled, loop for next input
-        }
-        if (cmd_result == -1)
-        {
-            log_message("User requested exit.");
-            printf("\n%s%sGoodbye!%s\n", COLOR_BOLD, COLOR_GREEN, COLOR_RESET);
-            break; // Exit command received
-        }
-
-        // If not a built-in command, check for assignment or treat as expression
-
-        // Check for assignment: identifier = expression
-        char *equals_pos = strchr(start, '=');
-        char *first_op = strpbrk(start, "+-*/^%"); // Find first non-assignment operator
-
-        // Check if '=' exists and appears *before* any other operator (or if no other ops exist)
-        // Also ensure it's not the first character (e.g. "= 5")
-        if (equals_pos != NULL && equals_pos != start && (first_op == NULL || equals_pos < first_op))
-        {
-            // Potential assignment found
-            char var_name[MAX_IDENTIFIER_LEN];
-            char *name_end = equals_pos;
-            // Trim whitespace before '='
-            while (name_end > start && isspace((unsigned char)*(name_end - 1)))
+            size_t arg_len = strlen(argv[i]);
+            // Check for potential buffer overflow before strcat
+            if (current_len + arg_len + (current_len > 0 ? 1 : 0) >= sizeof(expression_buffer))
             {
-                name_end--;
+                fprintf(stderr, "%sError:%s Command line expression too long.\n", COLOR_RED, COLOR_RESET);
+                close_logging(); // Close log before exiting
+                return 1;
             }
-
-            size_t name_len = name_end - start;
-            if (name_len > 0 && name_len < MAX_IDENTIFIER_LEN)
+            // Add space separator if not the first argument
+            if (current_len > 0)
             {
-                strncpy(var_name, start, name_len);
-                var_name[name_len] = '\0';
-
-                // Validate variable name (starts with letter/_, contains letter/digit/_)
-                int valid_name = (isalpha((unsigned char)var_name[0]) || var_name[0] == '_');
-                for (size_t k = 1; k < name_len && valid_name; k++)
-                {
-                    if (!isalnum((unsigned char)var_name[k]) && var_name[k] != '_')
-                    {
-                        valid_name = 0;
-                    }
-                }
-
-                // Check reserved words (commands, functions, constants)
-                // This is a simplification; ideally check against all known identifiers.
-                if (valid_name && (strcmp(var_name, "help") == 0 || strcmp(var_name, "exit") == 0 || /* add more */
-                                   strcmp(var_name, "pi") == 0 || strcmp(var_name, "e") == 0 ||
-                                   strcmp(var_name, "sin") == 0 /* add all functions */))
-                {
-                    fprintf(stderr, "%sError:%s Cannot assign to reserved name '%s'.\n", COLOR_RED, COLOR_RESET, var_name);
-                    log_message("Assignment Error: Attempt to assign to reserved name '%s'", var_name);
-                    valid_name = 0;
-                }
-
-                if (valid_name)
-                {
-                    const char *expr_start = equals_pos + 1; // Start of the expression part
-                    double result = handle_assignment(var_name, expr_start);
-
-                    if (!isnan(result))
-                    {
-                        // Print assignment result
-                        printf("%s%s = %s%g%s\n", COLOR_YELLOW, var_name, COLOR_GREEN, result, COLOR_RESET);
-                        // handle_assignment already updates last_result and 'ans' internally
-                        // and logs the assignment.
-                    }
-                    else
-                    {
-                        // Error message already printed by handle_assignment or its sub-functions
-                        log_message("Assignment failed for: %s", start);
-                    }
-                    continue; // Assignment handled, proceed to next input
-                }
-                else if (!valid_name)
-                {
-                    fprintf(stderr, "%sError:%s Invalid variable name '%s' for assignment.\n", COLOR_RED, COLOR_RESET, var_name);
-                    log_message("Assignment Error: Invalid variable name '%s'", var_name);
-                    continue; // Invalid assignment syntax
-                }
+                strcat(expression_buffer, " ");
+                current_len++;
             }
+            strcat(expression_buffer, argv[i]);
+            current_len += arg_len;
         }
 
-        // If not an assignment or command, evaluate as a mathematical expression
-        double result = evaluate_expression(start);
+        log_message("Command line execution: %s", expression_buffer);
+
+        // Evaluate the expression
+        double result = evaluate_expression(expression_buffer);
 
         if (isnan(result))
         {
-            // Error message should have been printed by evaluate_expression or its sub-functions
-            // Log message already added by evaluate_expression
+            // Error message already printed by evaluate_expression
+            log_message("Command line result: Error");
+            close_logging();
+            return 1; // Indicate error
         }
         else
         {
-            // Print the final result
-            printf("%s%g%s\n", COLOR_GREEN, result, COLOR_RESET);
-            // last_result, 'ans', and logging handled by evaluate_expression
+            // Print result (consistent format)
+            // Use clean_near_zero to avoid printing "-0"
+            printf("%s%g%s\n", COLOR_GREEN, clean_near_zero(result, 1e-10), COLOR_RESET);
+            log_message("Command line result: %g", result);
+            close_logging();
+            return 0; // Indicate success
         }
-    } // End while(1)
+    }
+    else
+    {
+        // --- Interactive Mode ---
+        printf("\n%sNMRI Command Line Calculator%s\n", COLOR_BOLD, COLOR_RESET);
+        printf("Type '%shelp%s' for instructions, '%sexit%s' to quit.\n\n",
+               COLOR_GREEN, COLOR_RESET, COLOR_GREEN, COLOR_RESET);
 
-    close_logging(); // Close the log file properly
-    // disableRawMode() is called automatically via atexit()
-    return 0; // Success
+        log_session_start(); // Log start of interactive session
+
+        while (1)
+        {
+            char input[MAX_INPUT];
+            readCommand(input, sizeof(input)); // Use line editing function
+
+            // Trim leading whitespace (readCommand might leave some if only Enter is pressed)
+            char *start = input;
+            while (isspace((unsigned char)*start))
+                start++;
+            if (*start == '\0')
+                continue; // Ignore empty lines
+
+            // Add non-empty command to history
+            add_to_history(start);
+            // Log the raw input
+            log_message("User input: %s", start);
+
+            // Process built-in commands first
+            int cmd_result = process_command(start);
+            if (cmd_result == 1)
+                continue; // Command was handled, loop for next input
+            if (cmd_result == -1)
+            { // Exit command received
+                log_message("User requested exit.");
+                printf("\n%s%sGoodbye!%s\n", COLOR_BOLD, COLOR_GREEN, COLOR_RESET);
+                break;
+            }
+
+            // If not a built-in command, check for assignment or treat as expression
+
+            // Check for assignment: identifier = expression
+            char *equals_pos = strchr(start, '=');
+            char *first_op = strpbrk(start, "+-*/^%"); // Find first non-assignment operator
+            // Check if '=' exists and appears *before* any other operator (or if no other ops exist)
+            // Also ensure it's not the first character (e.g. "= 5")
+            if (equals_pos != NULL && equals_pos != start && (first_op == NULL || equals_pos < first_op))
+            {
+                // Potential assignment found
+                char var_name[MAX_IDENTIFIER_LEN];
+                char *name_end = equals_pos;
+                // Trim whitespace before '='
+                while (name_end > start && isspace((unsigned char)*(name_end - 1)))
+                    name_end--;
+
+                size_t name_len = name_end - start;
+                if (name_len > 0 && name_len < MAX_IDENTIFIER_LEN)
+                {
+                    strncpy(var_name, start, name_len);
+                    var_name[name_len] = '\0';
+
+                    // Validate variable name (starts with letter/_, contains letter/digit/_)
+                    int valid_name = (isalpha((unsigned char)var_name[0]) || var_name[0] == '_');
+                    for (size_t k = 1; k < name_len && valid_name; k++)
+                    {
+                        if (!isalnum((unsigned char)var_name[k]) && var_name[k] != '_')
+                            valid_name = 0;
+                    }
+                    // Simplified reserved word check - expand this list as needed
+                    if (valid_name && (strcmp(var_name, "help") == 0 || strcmp(var_name, "exit") == 0 ||
+                                       strcmp(var_name, "pi") == 0 || strcmp(var_name, "e") == 0 ||
+                                       strcmp(var_name, "sin") == 0 /* add more reserved words */))
+                    {
+                        fprintf(stderr, "%sError:%s Cannot assign to reserved name '%s'.\n", COLOR_RED, COLOR_RESET, var_name);
+                        log_message("Assignment Error: Attempt to assign to reserved name '%s'", var_name);
+                        valid_name = 0;
+                    }
+
+                    if (valid_name)
+                    {
+                        const char *expr_start = equals_pos + 1; // Start of the expression part
+                        double result = handle_assignment(var_name, expr_start);
+                        if (!isnan(result))
+                        {
+                            // Print assignment result
+                            printf("%s%s = %s%g%s\n", COLOR_YELLOW, var_name, COLOR_GREEN, clean_near_zero(result, 1e-10), COLOR_RESET);
+                        }
+                        else
+                        {
+                            // Error message already printed by handle_assignment or its sub-functions
+                            log_message("Assignment failed for: %s", start);
+                        }
+                        continue; // Assignment handled, proceed to next input
+                    }
+                    else
+                    {
+                        // Error message for invalid name already printed if needed
+                        // Or print a generic one here if validation fails silently
+                        fprintf(stderr, "%sError:%s Invalid variable name '%s' for assignment.\n", COLOR_RED, COLOR_RESET, var_name);
+                        log_message("Assignment Error: Invalid variable name '%s'", var_name);
+                        continue; // Invalid assignment syntax
+                    }
+                }
+                else
+                {
+                    fprintf(stderr, "%sError:%s Invalid variable name length for assignment.\n", COLOR_RED, COLOR_RESET);
+                    log_message("Assignment Error: Invalid variable name length near '%s'", start);
+                    continue;
+                }
+            }
+
+            // If not an assignment or command, evaluate as a mathematical expression
+            double result = evaluate_expression(start);
+            if (!isnan(result))
+            {
+                // Print the final result, cleaning near-zero values
+                printf("%s%g%s\n", COLOR_GREEN, clean_near_zero(result, 1e-10), COLOR_RESET);
+            }
+            // Error messages and logging handled within evaluate_expression
+        } // End while(1)
+
+        close_logging(); // Close the log file properly
+        // disableRawMode() is called automatically via atexit()
+        return 0; // Success
+    }
 }
 #endif // FOR_TESTING

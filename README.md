@@ -16,6 +16,7 @@
 - **Colorful Interface**: Enjoy a visually appealing experience with color-coded outputs for results, errors, and help text
 - **Interactive Experience**: Enjoy a responsive, user-friendly interface designed for both quick calculations and complex mathematical explorations
 - **Comprehensive Logging**: Keep track of your calculation sessions with detailed logging capabilities
+- **Dual-Mode Operation**: Work interactively for exploration or directly evaluate expressions from command line for quick calculations and scripting
 - **Elegant Syntax**: Express complex mathematical ideas with clean, intuitive notation
 
 ## Getting Started
@@ -80,7 +81,7 @@ Our tests verify everything from basic arithmetic to complex expressions and edg
 
 ### Starting the Calculator
 
-Run the executable:
+Run the executable in interactive mode:
 
 ```bash
 ./nmri
@@ -90,6 +91,30 @@ Or, if you've installed it system-wide:
 
 ```bash
 nmri
+```
+
+### Command-Line Expression Evaluation
+
+Evaluate expressions directly without entering interactive mode:
+
+```bash
+nmri "2 + 2"
+# Output: 4
+
+nmri "100 + 20%"
+# Output: 120
+
+nmri "sin(pi/2)"
+# Output: 1
+```
+
+This mode is especially useful for scripts or when you need a quick calculation:
+
+```bash
+# Example in a shell script
+radius=5
+area=$(nmri "$radius^2 * pi")
+echo "Area of circle: $area"
 ```
 
 ### Basic Operations
