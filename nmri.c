@@ -45,14 +45,14 @@
 
 /* --- Configuration Constants --- */
 
-#define MAX_TOKENS 100                            // Maximum tokens allowed in an expression
-#define MAX_IDENTIFIER_LEN 32                     // Maximum length for variable/function names (increased from 20)
-#define MAX_VARIABLES 100                         // Maximum number of user-defined variables
-#define HISTORY_SIZE 20                           // Number of commands to keep in history
-#define MAX_INPUT 256                             // Maximum length of user input line
-#define MAX_LOG_LINE 1024                         // Maximum length of a single log line
-#define DEFAULT_LOG_FILENAME "nmri.log"           // Default name for the log file
-#define CMD_LINE_EXPR_BUFFER_SIZE (MAX_INPUT * 2) // Buffer for concatenated cmd line args
+#define MAX_TOKENS 100                                 // Maximum tokens allowed in an expression
+#define MAX_IDENTIFIER_LEN 32                          // Maximum length for variable/function names (increased from 20)
+#define MAX_VARIABLES 100                              // Maximum number of user-defined variables
+#define HISTORY_SIZE 20                                // Number of commands to keep in history
+#define NMRI_MAX_INPUT 256                             // Maximum length of user input line
+#define MAX_LOG_LINE 1024                              // Maximum length of a single log line
+#define DEFAULT_LOG_FILENAME "nmri.log"                // Default name for the log file
+#define CMD_LINE_EXPR_BUFFER_SIZE (NMRI_MAX_INPUT * 2) // Buffer for concatenated cmd line args
 
 /* --- ANSI Color Codes --- */
 #define COLOR_RESET "\033[0m"
@@ -182,13 +182,13 @@ double memory = 0.0;      // Value stored in the 'M' memory register
 double last_result = 0.0; // Result of the last successful calculation (used for 'ans')
 
 // Command history
-char command_history[HISTORY_SIZE][MAX_INPUT];
+char command_history[HISTORY_SIZE][NMRI_MAX_INPUT];
 int history_count = 0; // Number of commands currently in history
 
 // Logging state
-FILE *log_file = NULL;                           // File pointer for the log file
-int logging_enabled = 0;                         // Flag: 1 if logging is active, 0 otherwise
-char log_path[MAX_INPUT] = DEFAULT_LOG_FILENAME; // Path to the log file
+FILE *log_file = NULL;                                // File pointer for the log file
+int logging_enabled = 0;                              // Flag: 1 if logging is active, 0 otherwise
+char log_path[NMRI_MAX_INPUT] = DEFAULT_LOG_FILENAME; // Path to the log file
 
 // Terminal state (for raw mode)
 struct termios orig_termios; // Stores original terminal settings
@@ -576,12 +576,12 @@ void add_to_history(const char *cmd)
     if (history_count == HISTORY_SIZE)
     {
         // History is full, shift existing commands up
-        memmove(command_history[0], command_history[1], (HISTORY_SIZE - 1) * MAX_INPUT);
+        memmove(command_history[0], command_history[1], (HISTORY_SIZE - 1) * NMRI_MAX_INPUT);
         history_count--; // Make space for the new command
     }
     // Add the new command at the end
-    strncpy(command_history[history_count], cmd, MAX_INPUT - 1);
-    command_history[history_count][MAX_INPUT - 1] = '\0'; // Ensure null termination
+    strncpy(command_history[history_count], cmd, NMRI_MAX_INPUT - 1);
+    command_history[history_count][NMRI_MAX_INPUT - 1] = '\0'; // Ensure null termination
     history_count++;
 }
 
@@ -1315,12 +1315,12 @@ double handle_assignment(const char *var_name, const char *expression)
 int process_command(const char *input)
 {
     // Trim leading/trailing whitespace for simpler comparison
-    char trimmed_input[MAX_INPUT];
+    char trimmed_input[NMRI_MAX_INPUT];
     const char *start = input;
     while (isspace((unsigned char)*start))
         start++;
-    strncpy(trimmed_input, start, MAX_INPUT - 1);
-    trimmed_input[MAX_INPUT - 1] = '\0';
+    strncpy(trimmed_input, start, NMRI_MAX_INPUT - 1);
+    trimmed_input[NMRI_MAX_INPUT - 1] = '\0';
     char *end = trimmed_input + strlen(trimmed_input) - 1;
     while (end >= trimmed_input && isspace((unsigned char)*end))
         *end-- = '\0';
@@ -1639,8 +1639,8 @@ void readCommand(char *buffer, int max_size)
 {
     enableRawMode(); // Switch to raw mode for character-by-character input
     int pos = 0, len = 0, history_pos = history_count, saved_current = 0;
-    char current_typed[MAX_INPUT] = {0}; // Buffer to save current input when navigating history
-    memset(buffer, 0, max_size);         // Clear the input buffer initially
+    char current_typed[NMRI_MAX_INPUT] = {0}; // Buffer to save current input when navigating history
+    memset(buffer, 0, max_size);              // Clear the input buffer initially
     // Print the prompt
     printf("%s%s■%s ", COLOR_BOLD, COLOR_CYAN, COLOR_RESET);
     fflush(stdout);
@@ -1735,8 +1735,8 @@ void readCommand(char *buffer, int max_size)
                     case 'A': // Up Arrow (History Previous)
                         if (!saved_current && len > 0)
                         {
-                            strncpy(current_typed, buffer, MAX_INPUT - 1);
-                            current_typed[MAX_INPUT - 1] = '\0';
+                            strncpy(current_typed, buffer, NMRI_MAX_INPUT - 1);
+                            current_typed[NMRI_MAX_INPUT - 1] = '\0';
                             saved_current = 1;
                         }
                         if (history_pos > 0)
@@ -1909,7 +1909,7 @@ int main(int argc, char *argv[])
 
         while (1)
         {
-            char input[MAX_INPUT];
+            char input[NMRI_MAX_INPUT];
             readCommand(input, sizeof(input)); // Use line editing function
 
             // Trim leading whitespace (readCommand might leave some if only Enter is pressed)
